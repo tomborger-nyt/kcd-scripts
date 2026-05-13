@@ -11,6 +11,9 @@ on:
       - '!all-contributors/**'
   pull_request:
 
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -26,15 +29,15 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: ⬇️ Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: ⎔ Setup node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: ${{ matrix.node }}
 
       - name: 📥 Download deps
-        uses: bahmutov/npm-install@v1
+        uses: bahmutov/npm-install@20216767ca67f0f7b4d095dc5859c5700a6581cb # v1
         with:
           useLockFile: false
 
@@ -42,10 +45,39 @@ jobs:
         run: npm run validate
 
       - name: ⬆️ Upload coverage report
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@ab904c41d6ece82784817410c45d8b8c02684457 # v3
+
+  build-release-artifact:
+    needs: main
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    if: ${{ github.repository == 'kentcdodds/kcd-scripts' && github.event_name == 'push' }}
+    steps:
+      - name: ⬇️ Checkout repo
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: ⎔ Setup node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: lts/*
+
+      - name: Install deps
+        run: npm install --ignore-scripts
+
+      - name: 🏗 Run build script
+        run: npm run build
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: npm-package-dist
+          path: dist
+          if-no-files-found: error
+          retention-days: 7
 
   release:
-    needs: main
+    needs: build-release-artifact
     runs-on: ubuntu-latest
     permissions:
       contents: write # to be able to publish a GitHub release
@@ -54,29 +86,25 @@ jobs:
       pull-requests: write # to be able to comment on released pull requests
     env:
       NPM_CONFIG_PROVENANCE: 'true'
-    if:
-      ${{ github.repository == 'kentcdodds/kcd-scripts' &&
-      contains('refs/heads/main,refs/heads/beta,refs/heads/next,refs/heads/alpha',
-      github.ref) && github.event_name == 'push' }}
+    if: ${{ github.repository == 'kentcdodds/kcd-scripts' && github.event_name == 'push' }}
     steps:
       - name: ⬇️ Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: ⎔ Setup node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: lts/*
+          registry-url: https://registry.npmjs.org
 
-      - name: 📥 Download deps
-        uses: bahmutov/npm-install@v1
+      - name: Download package artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          useLockFile: false
-
-      - name: 🏗 Run build script
-        run: npm run build
+          name: npm-package-dist
+          path: dist
 
       - name: 🚀 Release
-        uses: cycjimmy/semantic-release-action@v5.0.2
+        uses: cycjimmy/semantic-release-action@ba330626c4750c19d8299de843f05c7aa5574f62 # v5.0.2
         with:
           semantic_version: 25
           branches: |
